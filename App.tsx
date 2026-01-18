@@ -6,23 +6,20 @@ import StartupCard from './components/StartupCard';
 import SolutionModal from './components/SolutionModal';
 import RegisterBurialModal from './components/RegisterBurialModal';
 import logo from './logo.png';
-
+import { subscribeStartups, upsertStartup } from "./services/startups";
 
 const App: React.FC = () => {
-  const [startups, setStartups] = useState<StartupFailure[]>(() => {
-    const saved = localStorage.getItem('phoenix_startups_v3');
-    return saved ? JSON.parse(saved) : SEED_STARTUPS;
-  });
+  const [startups, setStartups] = useState<StartupFailure[]>([]);
   
   const [selectedStartupId, setSelectedStartupId] = useState<string | null>(null);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<string>('All');
 
-  // Persist startups to localStorage whenever they change (autosave)
   useEffect(() => {
-    localStorage.setItem('phoenix_startups_v3', JSON.stringify(startups));
-  }, [startups]);
+    const unsub = subscribeStartups(setStartups);
+    return () => unsub();
+  }, []);
 
   const industries = useMemo(() => {
     return ['All', ...Array.from(new Set(startups.map(s => s.industry)))];
@@ -41,8 +38,8 @@ const App: React.FC = () => {
     startups.find(s => s.id === selectedStartupId) || null
   , [startups, selectedStartupId]);
 
-  const handleAddStartup = (newStartup: StartupFailure) => {
-    setStartups(prev => [newStartup, ...prev]);
+  const handleAddStartup = async (newStartup: StartupFailure) => {
+    await upsertStartup(newStartup);
   };
 
   const calculateNewVotes = (currentLikes: number, currentDislikes: number, type: 'like' | 'dislike', previousVote: 'like' | 'dislike' | null) => {
@@ -59,35 +56,40 @@ const App: React.FC = () => {
   };
 
   // Added missing handleAddSolution function to handle new solution submissions
-  const handleAddSolution = (startupId: string, solution: Solution) => {
-    setStartups(prev => prev.map(s => {
-      if (s.id === startupId) {
-        return {
-          ...s,
-          solutions: [solution, ...s.solutions]
-        };
-      }
-      return s;
-    }));
+  const handleAddSolution = async (startupId: string, solution: Solution) => {
+    const target = startups.find(s => s.id === startupId);
+    if (!target) return;
+
+    const updated: StartupFailure = {
+      ...target,
+      solutions: [solution, ...target.solutions],
+    };
+
+    await upsertStartup(updated);
   };
 
-  const handleVoteSolution = (startupId: string, solutionId: string, type: 'like' | 'dislike', previousVote: 'like' | 'dislike' | null) => {
-    setStartups(prev => prev.map(s => {
-      if (s.id === startupId) {
-        return {
-          ...s,
-          solutions: s.solutions.map(sol => {
-            if (sol.id === solutionId) {
-              const { likes, dislikes } = calculateNewVotes(sol.likes, sol.dislikes, type, previousVote);
-              return { ...sol, likes, dislikes };
-            }
-            return sol;
-          })
-        };
-      }
-      return s;
-    }));
+
+  const handleVoteSolution = async (
+    startupId: string,
+    solutionId: string,
+    type: 'like' | 'dislike',
+    previousVote: 'like' | 'dislike' | null
+  ) => {
+    const target = startups.find(s => s.id === startupId);
+    if (!target) return;
+
+    const updated: StartupFailure = {
+      ...target,
+      solutions: target.solutions.map(sol => {
+        if (sol.id !== solutionId) return sol;
+        const { likes, dislikes } = calculateNewVotes(sol.likes, sol.dislikes, type, previousVote);
+        return { ...sol, likes, dislikes };
+      })
+    };
+
+    await upsertStartup(updated);
   };
+
 
   const updateReplyVoteRecursive = (replies: Reply[], replyId: string, type: 'like' | 'dislike', previousVote: 'like' | 'dislike' | null): Reply[] => {
     return replies.map(rep => {
@@ -102,22 +104,27 @@ const App: React.FC = () => {
     });
   };
 
-  const handleVoteReply = (startupId: string, solutionId: string, replyId: string, type: 'like' | 'dislike', previousVote: 'like' | 'dislike' | null) => {
-    setStartups(prev => prev.map(s => {
-      if (s.id === startupId) {
-        return {
-          ...s,
-          solutions: s.solutions.map(sol => {
-            if (sol.id === solutionId) {
-              return { ...sol, replies: updateReplyVoteRecursive(sol.replies, replyId, type, previousVote) };
-            }
-            return sol;
-          })
-        };
-      }
-      return s;
-    }));
+  const handleVoteReply = async (
+    startupId: string,
+    solutionId: string,
+    replyId: string,
+    type: 'like' | 'dislike',
+    previousVote: 'like' | 'dislike' | null
+  ) => {
+    const target = startups.find(s => s.id === startupId);
+    if (!target) return;
+
+    const updated: StartupFailure = {
+      ...target,
+      solutions: target.solutions.map(sol => {
+        if (sol.id !== solutionId) return sol;
+        return { ...sol, replies: updateReplyVoteRecursive(sol.replies, replyId, type, previousVote) };
+      })
+    };
+
+    await upsertStartup(updated);
   };
+
 
   const addReplyRecursive = (replies: Reply[], parentId: string, newReply: Reply): Reply[] => {
     return replies.map(rep => {
@@ -131,7 +138,10 @@ const App: React.FC = () => {
     });
   };
 
-  const handleAddReply = (startupId: string, solutionId: string, content: string, parentReplyId?: string) => {
+  const handleAddReply = async (startupId: string, solutionId: string, content: string, parentReplyId?: string) => {
+    const target = startups.find(s => s.id === startupId);
+    if (!target) return;
+
     const newReply: Reply = {
       id: Math.random().toString(36).substr(2, 9),
       author: "Resonator",
@@ -142,24 +152,21 @@ const App: React.FC = () => {
       replies: []
     };
 
-    setStartups(prev => prev.map(s => {
-      if (s.id === startupId) {
-        return {
-          ...s,
-          solutions: s.solutions.map(sol => {
-            if (sol.id === solutionId) {
-              if (parentReplyId) {
-                return { ...sol, replies: addReplyRecursive(sol.replies, parentReplyId, newReply) };
-              }
-              return { ...sol, replies: [...sol.replies, newReply] };
-            }
-            return sol;
-          })
-        };
-      }
-      return s;
-    }));
+    const updated: StartupFailure = {
+      ...target,
+      solutions: target.solutions.map(sol => {
+        if (sol.id !== solutionId) return sol;
+        if (parentReplyId) {
+          return { ...sol, replies: addReplyRecursive(sol.replies, parentReplyId, newReply) };
+        }
+        return { ...sol, replies: [...sol.replies, newReply] };
+      })
+    };
+
+    await upsertStartup(updated);
   };
+
+
 
   return (
     <div className="min-h-screen pb-20 bg-[#050505] text-zinc-100 selection:bg-orange-600 selection:text-white">

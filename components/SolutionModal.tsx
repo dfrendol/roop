@@ -4,6 +4,8 @@ import { StartupFailure, Solution, AIAnalysis } from '../types';
 import { evaluateSolution, analyzeFailure } from '../services/geminiService';
 import StartupChat from './StartupChat';
 import SolutionItem from './SolutionItem';
+import { upsertStartup } from '../services/startups';
+import logo from '../logo.png';
 
 interface SolutionModalProps {
   startup: StartupFailure;
@@ -23,54 +25,58 @@ const SolutionModal: React.FC<SolutionModalProps> = ({ startup, onClose, onAddSo
 
   useEffect(() => {
     const fetchAnalysis = async () => {
-      const cacheKey = `ai_analysis_v3_${startup.id}`;
-      const cached = localStorage.getItem(cacheKey);
-      
-      if (cached) {
-        setAiAnalysis(JSON.parse(cached));
+      if (startup.aiAnalysis) {
+        setAiAnalysis(startup.aiAnalysis);
         return;
       }
 
+
       setIsLoadingAnalysis(true);
+        try {
+          const analysis = await analyzeFailure(startup.description, startup.reasonForFailure);
+          setAiAnalysis(analysis);
+
+          // ✅ Persist into Firestore on the startup doc
+          await upsertStartup({
+            ...startup,
+            aiAnalysis: analysis,
+          });
+        } catch (err) {
+          console.error("AI Analysis failed", err);
+        } finally {
+          setIsLoadingAnalysis(false);
+        }
+      };
+
+      fetchAnalysis();
+    }, [startup.id]); // ✅ stable
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!solutionText.trim()) return;
+
+      setIsSubmitting(true);
       try {
-        const analysis = await analyzeFailure(startup.description, startup.reasonForFailure);
-        setAiAnalysis(analysis);
-        localStorage.setItem(cacheKey, JSON.stringify(analysis));
+        const evaluation = await evaluateSolution(startup.description, solutionText);
+        const newSolution: Solution = {
+          id: Math.random().toString(36).substr(2, 9),
+          author: "Phoenix Pilot",
+          content: solutionText,
+          timestamp: Date.now(),
+          aiScore: evaluation.score,
+          aiFeedback: evaluation.feedback,
+          likes: 0,
+          dislikes: 0,
+          replies: []
+        };
+        onAddSolution(startup.id, newSolution);
+        setSolutionText('');
       } catch (err) {
-        console.error("AI Analysis failed", err);
+        alert("Evaluation failed. Please try again.");
       } finally {
-        setIsLoadingAnalysis(false);
+        setIsSubmitting(false);
       }
     };
-    fetchAnalysis();
-  }, [startup]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!solutionText.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      const evaluation = await evaluateSolution(startup.description, solutionText);
-      const newSolution: Solution = {
-        id: Math.random().toString(36).substr(2, 9),
-        author: "Phoenix Pilot",
-        content: solutionText,
-        timestamp: Date.now(),
-        aiScore: evaluation.score,
-        aiFeedback: evaluation.feedback,
-        likes: 0,
-        dislikes: 0,
-        replies: []
-      };
-      onAddSolution(startup.id, newSolution);
-      setSolutionText('');
-    } catch (err) {
-      alert("Evaluation failed. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl overflow-y-auto">
@@ -168,13 +174,16 @@ const SolutionModal: React.FC<SolutionModalProps> = ({ startup, onClose, onAddSo
           {/* Right Side: Rebirth Hub */}
           <div className="lg:w-1/2 p-10 flex flex-col overflow-y-auto bg-black/40">
             <div className="mb-12">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center shadow-2xl">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-orange-600"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                </div>
+              <div className="flex items-center gap-5 group cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+                <img 
+                    src={logo}
+                    alt="Startup Memorial logo"
+                    className="w-20 h-20 object-contain"
+                    draggable={false}
+                  />
                 <div>
-                  <h3 className="text-3xl font-black text-white uppercase tracking-tighter">The Phoenix Forge</h3>
-                  <p className="text-zinc-700 text-[10px] font-black uppercase tracking-[0.4em]">Crowdsourced Resurrections</p>
+                  <h1 className="text-[25px] font-black tracking-tighter text-white uppercase leading-none">STARTUP</h1>
+                  <h1 className="text-[25px] font-black tracking-tighter text-orange-400 uppercase leading-none">MEMORIAL</h1>
                 </div>
               </div>
             </div>

@@ -10,6 +10,7 @@ export interface StartupFailure {
   description: string;
   image: string;
   solutions: Solution[];
+  aiAnalysis?: AIAnalysis;
 }
 
 export interface Reply {
