@@ -1,0 +1,8 @@
+
+{
+  "name": "Phoenix Post-Mortem",
+  "description": "A platform for analyzing failed startup ideas and crowdsourcing innovative solutions to revive them.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
