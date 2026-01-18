@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<string>('All');
 
+  // Persist startups to localStorage whenever they change (autosave)
   useEffect(() => {
     localStorage.setItem('phoenix_startups_v3', JSON.stringify(startups));
   }, [startups]);
@@ -253,7 +254,7 @@ const App: React.FC = () => {
           </div>
         </div>
         <div className="flex flex-col items-center gap-6">
-          <p className="text-zinc-200 text-[10px] font-bold uppercase tracking-[0.5em] mb-4">Phoenix System // Operational</p>
+          <p className="text-zinc-200 text-[10px] font-bold uppercase tracking-[0.5em] mb-4">SM © 2026</p>
           <div className="flex gap-6">
             <div className="w-1.5 h-1.5 rounded-full bg-zinc-900"></div>
             <div className="w-1.5 h-1.5 rounded-full bg-orange-600 animate-ping"></div>
