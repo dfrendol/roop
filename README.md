@@ -21,4 +21,4 @@ The goal is to learn from what didn’t work by analyzing failure patterns, deci
 - Tailwind CSS
 - Google Gemini AI
 
-Link: startupmemorial.tech
+Link: [startupmemorial.tech](startupmemorial.tech)
